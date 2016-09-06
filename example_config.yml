@@ -1,0 +1,5 @@
+consumer_key: blah
+consumer_secret: bloop
+oauth_token: beep
+oauth_secret: borp
+htpasswd_path: /path/to/thingy/.htpasswd
