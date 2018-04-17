@@ -4,23 +4,13 @@ import yaml
 from middleware.auth import Auth
 import os
 from twitter_api import TwitterApi, TWITTER_CODE_TO_FALCON_STATUS
+import falcon_jsonify
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
-CONFIG = yaml.load(open(BASE_DIR + '/config.yml', 'r'))
+CONFIG = yaml.load(open('{}/{}'.format(BASE_DIR, '/config.yml'), 'r'))
 
-# from talons.auth import middleware
-# from talons.auth import basicauth, httpheader, htpasswd
-# SEE middleware.auth FOR REWORKING OF TALONS FOR SUPPORT IN FALCON > 0.4
 
-# auth_middleware = middleware.create_middleware(identify_with=[
-#                                                  basicauth.Identifier,
-#                                                  httpheader.Identifier],
-#                                                authenticate_with=htpasswd.Authenticator,
-#                                                **CONFIG)
-
-#app = falcon.API(before=[auth_middleware])
-
-app = falcon.API(middleware=[Auth(**CONFIG)])
+app = falcon.API(middleware=[Auth(**CONFIG), falcon_jsonify.Middleware(help_messages=True)])
 
 
 def validate_query_params(req, resp, resource, params):
@@ -58,12 +48,20 @@ class TwitterTimelineResource(TwitterResource):
         count = int(req.get_param('count'))
 
         if count:
-            status_code, timeline = self.twitter_api.get_home_timeline(count)
+            status_code, response = self.twitter_api.get_home_timeline(count)
         else:
-            status_code, timeline = self.twitter_api.get_home_timeline()
+            status_code, response = self.twitter_api.get_home_timeline()
 
-        resp.status = TWITTER_CODE_TO_FALCON_STATUS[status_code]
-        resp.body = json.dumps(timeline, encoding='utf-8')
+        if isinstance(response, dict) and response.get('errors'):
+            resp.status = TWITTER_CODE_TO_FALCON_STATUS[status_code]
+            resp.json = response
+
+        if status_code is 200:
+            resp.status = TWITTER_CODE_TO_FALCON_STATUS[status_code]
+            resp.json = {'statuses': response}
+
+        resp.content_type = 'application/json; charset=utf-8'
+
 
 class TwitterStatusResource(TwitterResource):
 
@@ -77,11 +75,12 @@ class TwitterStatusResource(TwitterResource):
         status_code, status = self.twitter_api.post_status(status)
 
         resp.status = TWITTER_CODE_TO_FALCON_STATUS[status_code]
-        resp.body = json.dumps(status, encoding='utf-8')
+        resp.json = status
+        resp.content_type = 'application/json; charset=utf-8'
 
 # Registering Routes
 
 app.add_route('/example', Resource())  # Test Endpoint
-app.add_route('/home_timeline', TwitterTimelineResource())
+app.add_route('/timeline', TwitterTimelineResource())
 app.add_route('/status', TwitterStatusResource())
 
